@@ -1,0 +1,17 @@
+.venv/
+__pycache__/
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+*.log
+*.o
+*.dSYM/
+/build/
+/bin/
+latbench
+/data/
+results/vocab.tsv
+results/merges.tsv
+results/_pieces.bin
+results/oracle_pieces.bin
+build.err
