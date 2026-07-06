@@ -51,7 +51,8 @@ def main() -> int:
         "",
         "Accuracy and cost of three softmax reductions - naive (no max subtraction), two-pass (max then "
         "exp), and online (the flash-attention single-pass streaming rescale) - measured against a "
-        "long-double reference over a grid of sequence lengths and logit scales, 8 seeds per cell.",
+        "double-precision (f64) reference over a grid of sequence lengths and logit scales, 8 seeds "
+        "per cell.",
         "",
         "## 1. Is the online (flash) rescale numerically free? (error ratio online / two-pass)",
         "",
@@ -91,11 +92,13 @@ def main() -> int:
     lat_mean, _ = _mean_std(lat_ratios)
     lines += [
         "",
-        f"Standalone, online is about {lat_mean:.1f}x SLOWER than two-pass, roughly constant across "
-        "length. It recomputes exponentials - one in the streaming reduce pass and one in the "
-        "normalization pass (~2L exp calls) versus two-pass's L (its max pass is exp-free). So the "
-        "flash softmax is not a standalone speed win; its benefit is fusing with the value matmul and "
-        "never materializing the score row, which a standalone softmax cannot show.",
+        f"Standalone, online is about {lat_mean:.1f}x SLOWER than two-pass, and the ratio declines with "
+        "length (the shortest lengths sit near the steady_clock timer-resolution floor, so their ratios "
+        "are noisy). It recomputes exponentials - TWO per element in the streaming reduce pass "
+        "(d*exp(m_old-m_new) + exp(x_i-m_new)) and one in the normalization pass, ~3L exp calls versus "
+        "two-pass's L (its max pass is exp-free). That 3:1 exp ratio is what the ~2.6-2.9x reflects. So "
+        "the flash softmax is not a standalone speed win; its benefit is fusing with the value matmul "
+        "and never materializing the score row, which a standalone softmax cannot show.",
         "",
         "## 3. Naive softmax overflow onset (fraction of seeds non-finite)",
         "",

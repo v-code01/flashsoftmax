@@ -11,7 +11,7 @@
 //   softmax_online    - a single streaming pass maintaining (m, d): on each score, m' = max(m, x_i),
 //                       d = d * exp(m - m') + exp(x_i - m'). Algebraically identical to two-pass, but
 //                       the repeated rescale d*exp(m-m') accumulates rounding as the sequence grows.
-//   softmax_reference - the same two-pass computation in long double: the oracle to measure error.
+//   softmax_reference - the same two-pass computation in double: the oracle to measure error.
 //
 // All f32 variants write normalized probabilities into `out`. The online variant additionally returns
 // its streaming (m, d) so a caller can check the denominator directly.
@@ -75,22 +75,22 @@ inline void softmax_online(const std::vector<float>& x, std::vector<float>& out)
     for (size_t i = 0; i < x.size(); ++i) out[i] = std::exp(x[i] - s.m) / s.d;
 }
 
-// High-precision reference (long double, two-pass). The oracle for measuring f32 error.
-inline void softmax_reference(const std::vector<float>& x, std::vector<long double>& out) {
+// High-precision reference (double, two-pass). The oracle for measuring f32 error.
+inline void softmax_reference(const std::vector<float>& x, std::vector<double>& out) {
     out.resize(x.size());
-    long double m = -INFINITY;
-    for (float v : x) m = std::fmaxl(m, static_cast<long double>(v));
-    long double sum = 0.0L;
+    double m = -INFINITY;
+    for (float v : x) m = std::fmax(m, static_cast<double>(v));
+    double sum = 0.0L;
     for (size_t i = 0; i < x.size(); ++i) {
-        long double e = std::exp(static_cast<long double>(x[i]) - m);
+        double e = std::exp(static_cast<double>(x[i]) - m);
         out[i] = e;
         sum += e;
     }
-    for (long double& v : out) v /= sum;
+    for (double& v : out) v /= sum;
 }
 
-// Maximum absolute error of an f32 probability vector against the long-double reference.
-inline double max_abs_error(const std::vector<float>& p, const std::vector<long double>& ref) {
+// Maximum absolute error of an f32 probability vector against the double-precision (f64) reference.
+inline double max_abs_error(const std::vector<float>& p, const std::vector<double>& ref) {
     double e = 0.0;
     for (size_t i = 0; i < p.size(); ++i) {
         double d = std::fabs(static_cast<double>(p[i]) - static_cast<double>(ref[i]));

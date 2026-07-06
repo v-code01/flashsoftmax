@@ -1,5 +1,5 @@
 // Correctness tests for the softmax variants. They check the invariants the study rests on: all
-// variants normalize to 1, two-pass and online track the long-double reference closely, online and
+// variants normalize to 1, two-pass and online track the double-precision (f64) reference closely, online and
 // two-pass agree, and naive (no max subtraction) overflows on large scores while the safe variants do
 // not.
 #include <cmath>
@@ -42,7 +42,7 @@ void test_uniform() {
 
 void test_normalizes_and_matches_reference() {
     std::vector<float> x = {1.0f, -2.0f, 3.5f, 0.0f, -1.25f, 4.0f, 2.2f}, out;
-    std::vector<long double> ref;
+    std::vector<double> ref;
     fsm::softmax_reference(x, ref);
     fsm::softmax_twopass(x, out);
     check(std::fabs(sum(out) - 1.0) < 1e-6, "twopass sums to 1");

@@ -1,10 +1,12 @@
 # Pre-registration: flashsoftmax
 
-Committed to git BEFORE the final benchmark and analysis. Not edited afterward.
+Committed to git BEFORE the final benchmark and analysis. The predictions are unedited afterward; a
+post-review pass corrected the reference wording from "long-double" to "double-precision (f64)" - the two
+are the same IEEE binary64 type on this platform, so no prediction or result changed.
 
 ## What is measured
 
-Three ways to compute a softmax over a vector of scores, against a long-double reference:
+Three ways to compute a softmax over a vector of scores, against a double-precision (f64) reference:
 
 - **naive** - `exp(x_i) / sum(exp(x_i))`, no max subtraction.
 - **two-pass** - subtract the max, then exponentiate and sum. The safe textbook form.
@@ -18,8 +20,8 @@ the textbook two-pass: does its O(L) sequential rescaling accumulate error as th
 being "single pass" actually faster?
 
 **Pilot note (honest disclosure):** a quick NumPy pilot suggested the online error *grew* with sequence
-length. That pilot mixed float32 and float64 in a way the rigorous C++ instrument (with a long-double
-oracle) does not, so I treat it as suspect and test the question properly below.
+length. That pilot mixed float32 and float64 in a way the rigorous C++ instrument (with a
+double-precision f64 reference) does not, so I treat it as suspect and test the question properly below.
 
 ## Predictions
 

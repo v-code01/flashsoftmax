@@ -3,33 +3,33 @@
 
 [project]
 name = "flashsoftmax"
-summary = "What the online (flash-attention) softmax reduction costs relative to the textbook two-pass softmax, measured against a long-double reference over sequence lengths 32..32768 and logit scales 1/10/30, 8 seeds per cell. The online streaming rescale is numerically EQUIVALENT to two-pass at every length (error ratio ~1, no length drift) - it accumulates nothing - but it is ~2.8x SLOWER as a standalone softmax because it recomputes exponentials; its benefit is memory and fusion inside full attention, not standalone speed. The naive no-max-subtraction softmax overflows f32 above ~88, and the overflow onset moves to shorter sequences as logit scale rises."
+summary = "What the online (flash-attention) softmax reduction costs relative to the textbook two-pass softmax, measured against a double-precision (f64) reference over sequence lengths 32..32768 and logit scales 1/10/30, 8 seeds per cell. The online streaming rescale is numerically EQUIVALENT to two-pass at every length (error ratio ~1, worst 1.43 near the f32 floor, no length drift) - it accumulates nothing - but it is ~2.6-2.9x SLOWER as a standalone softmax because it recomputes exponentials (~3L vs L); its benefit is memory and fusion inside full attention, not standalone speed. The naive no-max-subtraction softmax overflows f32 above ~88, and the overflow onset moves to shorter sequences as logit scale rises."
 language = "C++ with Python analysis"
 license = "MIT"
-oracles = "a long-double two-pass softmax reference; error is exact max-abs deviation of the f32 result. Data is deterministic-PRNG generated in-process (no model, no network). Latency is minimum-over-reps steady-clock time. verify.py recomputes the error ratios, latency ratio, and overflow trend independently of analyze.py. No LLM judge."
+oracles = "a double-precision (f64) two-pass softmax reference; error is exact max-abs deviation of the f32 result. Data is deterministic-PRNG generated in-process (no model, no network). Latency is minimum-over-reps steady-clock time. verify.py recomputes the error ratios, latency ratio, and overflow trend independently of analyze.py. No LLM judge."
 
 [[claim]]
 id = "pre-registered-prediction"
-statement = "Five predictions were committed to git in PREREG.md before the final run - naive overflows length-dependently, safe variants always safe, online numerically free with no length drift, online not faster standalone, error set by scale not length - and all five held. PREREG.md also honestly records that a NumPy pilot suggested online error grows with length; the rigorous long-double instrument refutes it (pilot was a float32/64 artifact). PREREG.md is not edited after the results."
+statement = "Five predictions were committed to git in PREREG.md before the final run - naive overflows length-dependently, safe variants always safe, online numerically free with no length drift, online not faster standalone, error set by scale not length - and all five held. PREREG.md also honestly records that a NumPy pilot suggested online error grows with length; the rigorous double-precision (f64) instrument refutes it (pilot was a float32/64 artifact). PREREG.md's predictions are unedited after the results (a post-review pass corrected the reference wording from 'long-double' to 'double-precision f64', which are identical on this platform; no prediction changed)."
 evidence = "PREREG.md (committed before results); README pre-registration section; bench_results/frontier.md."
 status = "verified"
 
 [[claim]]
 id = "online-is-numerically-free"
-statement = "The online (flash-attention) softmax is numerically equivalent to two-pass at every tested length up to 32768: the online/two-pass max-abs-error ratio stays ~1 (worst 1.19, and that only where errors sit near the 1e-9 f32 floor) with no upward trend. The rescale factor exp(m_old - m_new) is always <= 1 and well-conditioned, so the O(L) sequential rescales do not accumulate."
-evidence = "bench_results/frontier.md section 1; tools/verify.py asserts the ratio <= 2 at all lengths with no length drift."
+statement = "The online (flash-attention) softmax is numerically equivalent to two-pass at every tested length up to 32768: the online/two-pass max-abs-error ratio stays ~1 (worst 1.43, at length 128, scale=1, and that only where errors sit near the 1e-9 f32 floor) with no upward trend. The rescale factor exp(m_old - m_new) is always <= 1 and well-conditioned, so the O(L) sequential rescales do not accumulate."
+evidence = "bench_results/frontier.md section 1; tools/verify.py asserts the worst ratio over all scales is bounded (~1.43) with no length drift."
 status = "verified"
 
 [[claim]]
 id = "online-not-faster-standalone"
-statement = "Standalone, online is ~2.8x SLOWER than two-pass, roughly constant across length, because it does an exponential in both the streaming reduce pass and the normalization pass (~2L exp) versus two-pass's L (the max pass is exp-free). 'Single pass' is not fewer operations. The flash softmax is a memory/fusion win in full attention, not a faster softmax in isolation."
+statement = "Standalone, online is ~2.6-2.9x SLOWER than two-pass (the ratio declines with length; the shortest lengths sit at the steady_clock timer-resolution floor and are noisy), because it does two exponentials per element in the streaming reduce pass (d*exp(m_old-m_new) + exp(x_i-m_new)) and one in the normalization pass (~3L exp) versus two-pass's L (the max pass is exp-free). That 3:1 exp ratio explains the slowdown. 'Single pass' is not fewer operations. The flash softmax is a memory/fusion win in full attention, not a faster softmax in isolation."
 evidence = "bench_results/frontier.md section 2 latency table; tools/verify.py asserts online median latency >= two-pass."
 status = "verified"
 
 [[claim]]
 id = "naive-overflow-is-length-dependent"
-statement = "Naive softmax (no max subtraction) overflows f32 once a score exceeds ~88, and because a longer sequence has a larger maximum, the overflow fraction at scale 30 climbs from 12% of seeds at length 64 to 100% by length 4096. Max subtraction is mandatory and increasingly so with context length."
-evidence = "bench_results/frontier.md section 3 overflow table; tools/verify.py asserts the overflow fraction grows with length and reaches 100%."
+statement = "Naive softmax (no max subtraction) overflows f32 once a score exceeds ~88, and because a longer sequence has a larger maximum, the overflow fraction at scale 30 rises on average - non-monotonically at 8 seeds (12% at 64, 0% at 128, 38% at 256, 25% at 512) - reaching 100% of seeds by length 4096. Max subtraction is mandatory and increasingly so with context length."
+evidence = "bench_results/frontier.md section 3 overflow table; tools/verify.py asserts the overflow fraction reaches 100% by the longest length."
 status = "verified"
 
 [[claim]]
@@ -40,7 +40,7 @@ status = "verified"
 
 [[claim]]
 id = "no-overclaim"
-statement = "One machine, one compiler, f32 activations with a long-double oracle, Gaussian scores. Absolute nanoseconds are machine-specific; the accuracy equivalence, the ~2.8x standalone slowdown, and the overflow trend are not. The online variant's standalone slowdown is an upper bound on the isolated-softmax cost - real flash attention fuses the normalization into the value accumulation - and the study says so. The adversarial review is in REVIEW.md."
+statement = "One machine, one compiler, f32 activations with a double-precision (f64) reference, Gaussian scores. Absolute nanoseconds are machine-specific; the accuracy equivalence, the ~2.6-2.9x standalone slowdown, and the overflow trend are not. The online variant's standalone slowdown is an upper bound on the isolated-softmax cost - real flash attention fuses the normalization into the value accumulation - and the study says so. The adversarial review is in REVIEW.md."
 evidence = "README limitations + falsifiers; REVIEW.md."
 status = "verified"
 

@@ -1,6 +1,6 @@
 # flashsoftmax: what the online (flash-attention) softmax reduction costs
 
-Accuracy and cost of three softmax reductions - naive (no max subtraction), two-pass (max then exp), and online (the flash-attention single-pass streaming rescale) - measured against a long-double reference over a grid of sequence lengths and logit scales, 8 seeds per cell.
+Accuracy and cost of three softmax reductions - naive (no max subtraction), two-pass (max then exp), and online (the flash-attention single-pass streaming rescale) - measured against a double-precision (f64) reference over a grid of sequence lengths and logit scales, 8 seeds per cell.
 
 ## 1. Is the online (flash) rescale numerically free? (error ratio online / two-pass)
 
@@ -24,19 +24,19 @@ The online error tracks two-pass to within a small factor at every length (max r
 
    length     two-pass ns    online ns    online / two-pass
    -------    -----------   ----------   ------------------
-        32             41          146                3.55x
-        64             83          291                3.51x
-       128            208          584                2.81x
-       256            354         1041                2.94x
-       512            770         2104                2.73x
+        32            166          354                2.14x
+        64            333          750                2.25x
+       128            458         1312                2.87x
+       256            625         1708                2.73x
+       512            834         2312                2.77x
       1024           1541         4333                2.81x
-      2048           3083         8520                2.76x
-      4096           6208        16312                2.63x
-      8192          12416        34980                2.82x
-     16384          25000        65875                2.63x
-     32768          50229       130875                2.61x
+      2048           3083         8271                2.68x
+      4096           6208        17458                2.81x
+      8192          12416        34750                2.80x
+     16384          25000        65480                2.62x
+     32768          50312       131333                2.61x
 
-Standalone, online is about 2.9x SLOWER than two-pass, roughly constant across length. It recomputes exponentials - one in the streaming reduce pass and one in the normalization pass (~2L exp calls) versus two-pass's L (its max pass is exp-free). So the flash softmax is not a standalone speed win; its benefit is fusing with the value matmul and never materializing the score row, which a standalone softmax cannot show.
+Standalone, online is about 2.6x SLOWER than two-pass, and the ratio declines with length (the shortest lengths sit near the steady_clock timer-resolution floor, so their ratios are noisy). It recomputes exponentials - TWO per element in the streaming reduce pass (d*exp(m_old-m_new) + exp(x_i-m_new)) and one in the normalization pass, ~3L exp calls versus two-pass's L (its max pass is exp-free). That 3:1 exp ratio is what the ~2.6-2.9x reflects. So the flash softmax is not a standalone speed win; its benefit is fusing with the value matmul and never materializing the score row, which a standalone softmax cannot show.
 
 ## 3. Naive softmax overflow onset (fraction of seeds non-finite)
 
@@ -69,7 +69,7 @@ Error is driven by logit scale, and non-monotonically: it peaks at moderate scal
 ## findings
 
 1. The online (flash-attention) softmax is numerically EQUIVALENT to two-pass at every tested length up to 32768 (error ratio ~1, max 1.43); the streaming rescale does not accumulate error. The trick is numerically free.
-2. But standalone it is ~2.9x SLOWER (it recomputes exponentials); its real payoff is memory and fusion inside full attention, not standalone softmax speed.
+2. But standalone it is ~2.6x SLOWER (it recomputes exponentials); its real payoff is memory and fusion inside full attention, not standalone softmax speed.
 3. Naive softmax overflows above ~88, and the overflow onset moves to shorter sequences as scale rises - max subtraction is mandatory and increasingly so with context length.
 4. Softmax error is governed by logit magnitude (non-monotonically), essentially independent of sequence length.
 

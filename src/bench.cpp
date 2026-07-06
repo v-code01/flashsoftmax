@@ -1,7 +1,7 @@
 // Measure the accuracy and cost of the three softmax variants over a grid of sequence lengths and
 // score magnitudes, with several seeds per cell for confidence intervals. Data is generated in-process
 // with a deterministic PRNG so the benchmark is self-contained and reproducible. For each (length,
-// scale, seed) it emits the max-abs error of each f32 variant against the long-double reference (or
+// scale, seed) it emits the max-abs error of each f32 variant against the double-precision (f64) reference (or
 // "nan" if the variant produced a non-finite result) and the minimum-over-reps latency of the two safe
 // variants.
 //
@@ -76,7 +76,7 @@ int main(int argc, char** argv) {
                 std::vector<float> x(static_cast<size_t>(L));
                 for (float& v : x) v = normal(scale);
 
-                std::vector<long double> ref;
+                std::vector<double> ref;
                 fsm::softmax_reference(x, ref);
                 std::vector<float> tp, on, na;
                 fsm::softmax_twopass(x, tp);
